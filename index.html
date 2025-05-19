@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTT Subscription Store</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    
+    <style>
+        /* === CSS Styles === */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .auth-container, .dashboard-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+
+        .product-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px;
+            border-radius: 8px;
+            display: inline-block;
+            width: 250px;
+            background: white;
+        }
+
+        input[type="email"], input[type="password"], input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- === Authentication Section === -->
+    <div class="auth-container" id="authSection">
+        <h2>Welcome to OTT Store</h2>
+        <input type="email" id="email" placeholder="Enter your email">
+        <input type="password" id="password" placeholder="Enter password">
+        <button onclick="signUp()">Create Account</button>
+        <button onclick="signIn()">Login</button>
+        <p id="authMessage" style="color: red; margin-top: 10px;"></p>
+    </div>
+
+    <!-- === Product Catalog === -->
+    <div class="dashboard-container hidden" id="dashboard">
+        <h2>Available Subscriptions</h2>
+        <div id="productList"></div>
+
+        <!-- === Order Form === -->
+        <div class="hidden" id="orderForm">
+            <h3>Complete Your Order</h3>
+            <p>Send ₹<span id="orderPrice">0</span> to: <strong>abcdef@cnrb</strong></p>
+            <input type="file" id="paymentProof" accept="image/*">
+            <button onclick="submitOrder()">Confirm Payment</button>
+            <button onclick="cancelOrder()">Cancel</button>
+        </div>
+
+        <!-- === User Subscriptions === -->
+        <div id="userSubscriptions" style="margin-top: 30px;">
+            <h3>Your Active Subscriptions</h3>
+            <div id="subscriptionList"></div>
+        </div>
+
+        <!-- === Credentials Update === -->
+        <div style="margin-top: 20px;">
+            <button onclick="requestCredentialUpdate()">Get Updated Credentials</button>
+        </div>
+    </div>
+
+    <script>
+        // === Firebase Configuration ===
+        const firebaseConfig = {
+            apiKey: "AIzaSyDBhUHem0fGd-VVlhR3UTGfnZO6pxQQKe0",
+            authDomain: "ott-store-f18d1.firebaseapp.com",
+            projectId: "ott-store-f18d1",
+            storageBucket: "ott-store-f18d1.firebasestorage.app",
+            messagingSenderId: "456950947897",
+            appId: "1:456950947897:web:57e3616fa7217933e9ede8",
+            measurementId: "G-S30Q641N98"
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        // === Apps Script URL ===
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7r3OxQ9Hwrz4QUlVnykCeQFLTV4-3HlxLCkDXva_GDC-wBOgqoWX9Fgiae7CYzFEG/exec'; // Replace with your deployed script URL
+
+        // === Authentication Functions ===
+        async function signUp() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            try {
+                await firebase.auth().createUserWithEmailAndPassword(email, password);
+                loadDashboard();
+            } catch (error) {
+                document.getElementById('authMessage').textContent = error.message;
+            }
+        }
+
+        async function signIn() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            try {
+                await firebase.auth().signInWithEmailAndPassword(email, password);
+                loadDashboard();
+            } catch (error) {
+                document.getElementById('authMessage').textContent = error.message;
+            }
+        }
+
+        // === Dashboard Functions ===
+        async function loadDashboard() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            loadProducts();
+            loadUserSubscriptions();
+        }
+
+        async function loadProducts() {
+            try {
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getProducts`);
+                const products = await response.json();
+                
+                const productList = document.getElementById('productList');
+                productList.innerHTML = '';
+                
+                products.forEach((product, index) => {
+                    if(index === 0) return; // Skip header
+                    const card = document.createElement('div');
+                    card.className = 'product-card';
+                    card.innerHTML = `
+                        <h3>${product[0]} ${product[1]}</h3>
+                        <p>Price: ₹${product[2]}</p>
+                        <button onclick="startOrder('${product[0]}', '${product[1]}', ${product[2]})">Buy Now</button>
+                    `;
+                    productList.appendChild(card);
+                });
+            } catch (error) {
+                alert('Error loading products: ' + error.message);
+            }
+        }
+
+        // === Order Management ===
+        let currentOrder = null;
+
+        function startOrder(platform, duration, price) {
+            currentOrder = { platform, duration, price };
+            document.getElementById('orderPrice').textContent = price;
+            document.getElementById('orderForm').classList.remove('hidden');
+        }
+
+        async function submitOrder() {
+            const file = document.getElementById('paymentProof').files[0];
+            if(!file) {
+                alert('Please upload payment proof');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const response = await fetch(APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'createOrder',
+                            email: firebase.auth().currentUser.email,
+                            ...currentOrder,
+                            paymentProof: e.target.result
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if(result.status === 'success') {
+                        alert('Order placed successfully!');
+                        loadDashboard();
+                    }
+                } catch (error) {
+                    alert('Order failed: ' + error.message);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // === Initialization ===
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                loadDashboard();
+            }
+        });
+    </script>
+</body>
+</html>
